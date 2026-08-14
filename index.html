@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hermes-status-hub</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="banner" class="banner hidden"></div>
+
+<header>
+  <h1>hermes-status-hub</h1>
+  <div class="head-right">
+    <span id="lastRefresh" class="muted">—</span>
+    <button id="btnRefresh">Refresh</button>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>SERVICES</h2>
+    <div id="services" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>INTEGRAÇÕES</h2>
+    <div id="integrations" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>DETALHES</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">vault_sync</div>
+        <div id="vaultSync" class="detail">—</div>
+      </div>
+      <div class="card">
+        <div class="card-title">whatsapp</div>
+        <div id="waStatus"></div>
+        <div class="row">
+          <button id="btnQr">Mostrar QR</button>
+          <button id="btnWaReset">WhatsApp reset</button>
+          <button id="btnRestart">Restart gateway</button>
+        </div>
+        <div id="qrBox"></div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <div class="card-title">gateway_log</div>
+      <pre id="gatewayLog"></pre>
+    </div>
+
+    <div class="card wide">
+      <div class="card-title">crons (<span id="cronCount">—</span>)</div>
+      <div class="row">
+        <input id="cronScript" placeholder="script (ex: utm_sync.py)">
+        <button id="btnRunCron">Run cron</button>
+        <input id="cronPattern" placeholder="pattern (ex: slack)">
+        <button id="btnPauseCron">Pause cron</button>
+      </div>
+      <pre id="cronList"></pre>
+    </div>
+  </section>
+</main>
+
+<div id="toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>

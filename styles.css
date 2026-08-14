@@ -1,0 +1,54 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #0d1117;
+  color: #c9d1d9;
+  font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; border-bottom: 1px solid #30363d; background: #161b22;
+  position: sticky; top: 0; z-index: 5;
+}
+h1 { font-size: 18px; margin: 0; letter-spacing: .5px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: #8b949e; margin: 28px 0 12px; }
+main { padding: 0 24px 48px; max-width: 1200px; margin: 0 auto; }
+.head-right { display: flex; align-items: center; gap: 12px; }
+.muted { color: #8b949e; font-size: 12px; }
+button, input {
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 6px; padding: 6px 12px; font-size: 13px;
+}
+button { cursor: pointer; }
+button:hover { background: #30363d; }
+input { min-width: 160px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; }
+.card.wide { margin-top: 12px; }
+.card-title { font-weight: 600; color: #e6edf3; margin-bottom: 8px; word-break: break-all; }
+.pill {
+  display: inline-block; padding: 2px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; color: #0d1117;
+}
+.pill.green { background: #3fb950; }
+.pill.red { background: #f85149; }
+.pill.amber { background: #d29922; }
+.detail { color: #8b949e; font-size: 12px; margin-top: 8px; word-break: break-word; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+pre {
+  background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+  padding: 10px; max-height: 280px; overflow: auto; white-space: pre-wrap;
+  font-size: 12px; color: #8b949e; margin: 0;
+}
+.banner {
+  background: #f85149; color: #0d1117; font-weight: 700;
+  padding: 10px 24px; text-align: center;
+}
+.hidden { display: none; }
+#qrBox img { margin-top: 10px; width: 100%; max-width: 260px; background: #fff; padding: 8px; border-radius: 6px; }
+#toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 20; }
+.toast {
+  background: #161b22; border: 1px solid #30363d; border-left: 4px solid #3fb950;
+  padding: 10px 14px; border-radius: 6px; max-width: 340px; font-size: 13px;
+}
+.toast.err { border-left-color: #f85149; }
