@@ -1,0 +1,43 @@
+# Environment & Credentials
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.id_rsa
+token.txt
+google_token.json
+credentials.json
+
+# Local Databases & State
+*.db
+*.sqlite
+*.sqlite3
+state.db
+
+# Dependencies & Virtual Environments
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs
+dist/
+build/
+.output/
+.parcel-cache/
+.next/
+.nuxt/
+
+# IDE & OS Artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+.gemini/
+scratch/
