@@ -4,26 +4,28 @@ const HEADER_HEX_LENGTH = 56;
 const DEFAULT_TTL_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
+const DEFAULT_MASTER_KEY = "hermes-default-zero-plaintext-master-key-2026";
 
-function deriveKey(secret) {
-  const master = secret || process.env.APP_MASTER_KEY || "hermes-default-zero-plaintext-master-key-2026";
-  return crypto.createHash("sha256").update(master, "utf8").digest();
+function getMasterKey(secret) {
+  return secret || process.env.APP_MASTER_KEY || process.env.SITE_PASSWORD || DEFAULT_MASTER_KEY;
 }
 
+function deriveKey(secret) {
+  return crypto.createHash("sha256").update(getMasterKey(secret), "utf8").digest();
+}
+
+/**
+ * PILAR 3: Comparador em tempo constante com proteção contra vazamento de tamanho de buffer
+ */
 function timingSafeEq(a, b) {
-  const bufA = typeof a === "string" ? Buffer.from(a, "utf8") : a;
-  const bufB = typeof b === "string" ? Buffer.from(b, "utf8") : b;
-
-  const hashA = crypto.createHash("sha256").update(bufA).digest();
-  const hashB = crypto.createHash("sha256").update(bufB).digest();
-  const hashesMatch = crypto.timingSafeEqual(hashA, hashB);
-
-  let lenDiff = bufA.length ^ bufB.length;
-  for (let i = 0; i < Math.min(bufA.length, bufB.length); i++) {
-    lenDiff |= bufA[i] ^ bufB[i];
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
   }
-
-  return hashesMatch && lenDiff === 0;
+  return crypto.timingSafeEqual(bufA, bufB);
 }
 
 function encryptPayload(payload, secret) {
@@ -59,57 +61,126 @@ function decryptPayload(hexPacket, secret) {
   }
 }
 
-const consumedOttStore = new Map();
+function unpackEncryptedOrPlain(input, secret) {
+  if (!input) return input;
+  if (typeof input === "object" && "encrypted" in input && typeof input.encrypted === "string") {
+    return decryptPayload(input.encrypted, secret);
+  }
+  if (typeof input === "string" && input.length >= HEADER_HEX_LENGTH && /^[0-9a-fA-F]+$/.test(input)) {
+    try {
+      return decryptPayload(input, secret);
+    } catch {
+      return input;
+    }
+  }
+  return input;
+}
 
-function issueEphemeralToken(data, ttlMs = DEFAULT_TTL_MS, options) {
+// PILAR 2: Tokens com TTL assinados (base64url + hmac_sha256)
+function toBase64Url(buf) {
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+function fromBase64Url(str) {
+  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (base64.length % 4 !== 0) base64 += "=";
+  return Buffer.from(base64, "base64");
+}
+
+function issueSignedToken(payload, ttlMs = DEFAULT_TTL_MS, secret) {
+  const master = getMasterKey(secret);
   const now = Date.now();
   const exp = now + ttlMs;
-  const nonce = crypto.randomBytes(8).toString("hex");
-  const jti = options?.jti || crypto.randomBytes(16).toString("hex");
 
-  const payload = {
-    data,
-    iat: now,
-    exp,
-    nonce,
-    jti,
-  };
+  const dataContainer = { data: payload, iat: now, exp };
+  const jsonStr = JSON.stringify(dataContainer);
+  const encodedPayload = toBase64Url(Buffer.from(jsonStr, "utf8"));
 
-  const token = encryptPayload(payload, options?.secret);
-  return { token, exp, jti };
+  const signature = crypto.createHmac("sha256", master).update(encodedPayload).digest("hex");
+  return `${encodedPayload}.${signature}`;
 }
 
-function verifyEphemeralToken(tokenHex, options) {
-  let payload;
+function verifySignedToken(token, secret) {
+  if (typeof token !== "string" || !token.includes(".")) {
+    return { valid: false, reason: "Formato de token inválido" };
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 2) return { valid: false, reason: "Token malformado" };
+
+  const [encodedPayload, signature] = parts;
+  const master = getMasterKey(secret);
+  const expectedSignature = crypto.createHmac("sha256", master).update(encodedPayload).digest("hex");
+
+  if (!timingSafeEq(signature, expectedSignature)) {
+    return { valid: false, reason: "Assinatura criptográfica inválida" };
+  }
+
   try {
-    payload = decryptPayload(tokenHex, options?.secret);
+    const rawJson = fromBase64Url(encodedPayload).toString("utf8");
+    const container = JSON.parse(rawJson);
+    if (Date.now() > container.exp) {
+      return { valid: false, expired: true, reason: "Token expirado" };
+    }
+    return { valid: true, data: container.data };
   } catch (err) {
-    return { valid: false, status: "invalid", reason: err.message };
+    return { valid: false, reason: err.message };
+  }
+}
+
+// PILAR 2: One-Time Tokens (OTT) de Queima Única
+const ottStore = new Map();
+
+function issueOneTimeToken(payload, ttlMs = DEFAULT_TTL_MS, secret) {
+  const master = getMasterKey(secret);
+  const now = Date.now();
+  const exp = now + ttlMs;
+  const id = crypto.randomBytes(16).toString("hex");
+
+  const message = `ott_${id}_${exp}`;
+  const hmac = crypto.createHmac("sha256", master).update(message).digest("hex");
+  const token = `${message}_${hmac}`;
+
+  ottStore.set(id, { payload, exp, consumed: false });
+  return { token, ottId: id, exp };
+}
+
+function consumeOneTimeToken(token, secret) {
+  if (typeof token !== "string" || !token.startsWith("ott_")) {
+    return { valid: false, reason: "Token OTT malformado" };
+  }
+
+  const parts = token.split("_");
+  if (parts.length !== 4) return { valid: false, reason: "Estrutura do OTT inválida" };
+
+  const [, id, expStr, hmac] = parts;
+  const exp = parseInt(expStr, 10);
+  const master = getMasterKey(secret);
+
+  const message = `ott_${id}_${exp}`;
+  const expectedHmac = crypto.createHmac("sha256", master).update(message).digest("hex");
+
+  if (!timingSafeEq(hmac, expectedHmac)) {
+    return { valid: false, reason: "Assinatura HMAC do OTT inválida" };
   }
 
   const now = Date.now();
-  if (now > payload.exp) {
-    return { valid: false, status: "expired", reason: "Token has expired" };
+  if (now > exp) {
+    ottStore.delete(id);
+    return { valid: false, expired: true, reason: "OTT expirado" };
   }
 
-  if (payload.jti) {
-    if (consumedOttStore.has(payload.jti)) {
-      return { valid: false, status: "consumed", reason: "Token has already been consumed" };
-    }
-    if (options?.autoConsumeOtt) {
-      consumedOttStore.set(payload.jti, payload.exp);
-    }
+  const record = ottStore.get(id);
+  if (!record || record.consumed) {
+    return { valid: false, consumed: true, reason: "Token já foi consumido" };
   }
 
-  return {
-    valid: true,
-    status: "valid",
-    data: payload.data,
-    exp: payload.exp,
-    jti: payload.jti,
-  };
+  record.consumed = true;
+  ottStore.set(id, record);
+  return { valid: true, data: record.payload };
 }
 
+// PILAR 4: Anti-Brute Force Guard
 const bruteForceStore = new Map();
 
 class BruteForceGuard {
@@ -153,11 +224,15 @@ class BruteForceGuard {
 }
 
 module.exports = {
+  getMasterKey,
   deriveKey,
   timingSafeEq,
   encryptPayload,
   decryptPayload,
-  issueEphemeralToken,
-  verifyEphemeralToken,
+  unpackEncryptedOrPlain,
+  issueSignedToken,
+  verifySignedToken,
+  issueOneTimeToken,
+  consumeOneTimeToken,
   BruteForceGuard,
 };
